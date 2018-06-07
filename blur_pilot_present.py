@@ -46,8 +46,8 @@ TESTSTIMDIR = os.path.join(CURDIR,'test_stimuli')
 RESDIR = os.path.join(CURDIR,'results') #going in results folder
 
 #directing to conditions folder, reading it in with pandas, shuffling the conditions (because blur levels listed in order)
-#FN = os.path.join(CSVDIR,"conditions.csv")
-FN = os.path.join(CSVDIR,"conditions_try.csv")
+FN = os.path.join(CSVDIR,"conditions.csv")
+#FN = os.path.join(CSVDIR,"conditions_try.csv")
 trials = pd.read_csv(FN)
 trials = trials.sample(frac=1).reset_index(drop=True)
 
