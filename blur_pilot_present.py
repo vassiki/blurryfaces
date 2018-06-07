@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import time
 import re
+#from collections import OrderedDict
 from psychopy import visual, event, core, gui
 
 # ToDo:
@@ -17,6 +18,12 @@ from psychopy import visual, event, core, gui
 # 6. (will be done post-hoc) Record which face was selected, not just the mouse positions.
 # 7. (???) Give participants accuracy feedback at every break.
 # 8. (complete) Add breaks.
+
+# 9. Change in image reading logic:
+#       Read all the unique images and save them with the same name as row entries
+#       Dictionary containing 10 test image visual stims, with key names from row names
+#       Dictionary containing 10 names of images per trial, 550*10 as key, with value as position
+#       Loop through image stim dict and assign correct positions to each one in presentation loop
 
 participant = '00'
 
@@ -39,8 +46,8 @@ TESTSTIMDIR = os.path.join(CURDIR,'test_stimuli')
 RESDIR = os.path.join(CURDIR,'results') #going in results folder
 
 #directing to conditions folder, reading it in with pandas, shuffling the conditions (because blur levels listed in order)
-FN = os.path.join(CSVDIR,"conditions.csv")
-#FN = os.path.join(CSVDIR,"conditions_try.csv")
+#FN = os.path.join(CSVDIR,"conditions.csv")
+FN = os.path.join(CSVDIR,"conditions_try.csv")
 trials = pd.read_csv(FN)
 trials = trials.sample(frac=1).reset_index(drop=True)
 
@@ -65,19 +72,29 @@ for i in range(trials.shape[0]):
     trial_probe = visual.ImageStim(win, pos=(0,0), image=probe, name='Probe_Img')
     stimuli_probe[i] = trial_probe
     #print "TRIAL NUMBER {0}".format(i)
-    test_images = []
-    for j in range(10): # for 10 positions
+#    test_images = []
+#    for j in range(10): # for 10 positions
+#        image_col = 'Image{0}'.format(j)
+#        #print image_col
+#        image_name = os.path.join(TESTSTIMDIR,trials.loc[i,image_col])
+#        image = visual.ImageStim(win, pos=resp_positions[j],image=image_name, name='Resp_Img')
+#        test_images.append(image)
+    pos_list = {}
+    for j in range(10):
         image_col = 'Image{0}'.format(j)
-        #print image_col
-        image_name = os.path.join(TESTSTIMDIR,trials.loc[i,image_col])
-        image = visual.ImageStim(win, pos=resp_positions[j],image=image_name, name='Resp_Img')
-        test_images.append(image)
-        
-    stimuli_resp[i] = test_images
-    
+        image_n = trials.loc[i,image_col]
+       # print image_col,image_n
+        pos_list[image_n] = resp_positions[j]
+    stimuli_resp[i] = pos_list
     keys = event.getKeys()
     if 'q' in keys or 'escape' in keys:
         core.quit()
+    
+test_images = {}
+for i,image_n in enumerate(os.listdir(TESTSTIMDIR)):
+    if '.jpg' in image_n:
+        image_path = os.path.join(TESTSTIMDIR,image_n)
+        test_images[image_n] = visual.ImageStim(win,image=image_path, name='Resp_Img_{0}'.format(i))
 
 #establishing the instruction and thanks text    
 instr_text = ("For each trial, you will see a target face at varying degrees of blurriness. " 
@@ -152,10 +169,17 @@ for i in range(len(stimuli_probe)):
     #mouse.setPos(newPos=(float(start_mouse_pos[0]),float(start_mouse_pos[1]))) #not reading the negatives in the input file?
     mouse.setPos(newPos=(start_mouse_pos[0],start_mouse_pos[1])) 
     
+    for trial_images in stimuli_resp[i].keys():
+        #print i, stimuli_resp[i]
+        test_images[trial_images].pos = stimuli_resp[i][trial_images]
+        
     while not respMade and time.time() - resp_start < resp_dur:
         mouse.setVisible(1)
-        for j in range(10):
-            stimuli_resp[i][j].draw()
+#        for j in range(10):
+        for j in test_images.keys():
+            test_images[j].draw()
+#            stimuli_resp[i][j].draw()
+
         win.flip()
         mouse_resp_0, mouse_resp_1, mouse_resp_2 = mouse.getPressed()
         
@@ -163,6 +187,9 @@ for i in range(len(stimuli_probe)):
         if mouse_resp_0:
             resp = mouse.getPos() 
             rt = time.time() - resp_start
+            for im in test_images:
+                if mouse.isPressedIn(test_images[im],buttons=[0]):
+                    resp = im
             respMade = 1
             #box.pos = resp #box only stays for a flip, no point in drawing
             #box.draw()
@@ -214,6 +241,17 @@ for j in range(trials.shape[0]):
     resp_images.append(trials.loc[j, 'Image9'])
     loc_images.append(resp_images)
 
+correct = []
+for idx in range(trials.shape[0]):
+    realim = probe_images[idx].split('_')[0]
+    if isinstance(mouse_click[idx],str):
+        respim = mouse_click[idx].split('_')[0]
+        if respim == realim:
+            correct.append(1)
+        else:
+            correct.append(0)
+    else:
+        correct.append(0)
 
 #for k in range(10):
     #image_num = 'Image{0}'.format(k)
@@ -234,10 +272,11 @@ for j in range(trials.shape[0]):
 
 
 #saving the files in participant folders
-out_dict = {'Probe_Img': probe_images,'start_mouse_pos': mouse_start, 'Response': mouse_click, 'RT': reaction_times, 'Correct_Img': corr_images,'RL': loc_images}
-df_to_save = pd.DataFrame(out_dict,index=False)
+#out_dict = {'Probe_Img': probe_images,'start_mouse_pos': mouse_start, 'Response': mouse_click, 'RT': reaction_times, 'Correct_Img': corr_images,'RL': loc_images}
+out_dict = {'Probe_Img': probe_images,'start_mouse_pos': mouse_start, 'Response': mouse_click, 'RT': reaction_times, 'RL': loc_images, 'Correct':correct}
+df_to_save = pd.DataFrame(out_dict)
 FN_TO_SAVE = os.path.join(RESDIR,"blur_pilot_sub{0}.csv".format(participant))
-df_to_save.to_csv(FN_TO_SAVE, sep=",")
+df_to_save.to_csv(FN_TO_SAVE, sep=",",index=False)
 
 #showing thanks screen and exit
 thanks.draw()
